@@ -126,6 +126,12 @@ void getFileExtension(const char* filename, char* extension, size_t extSize);
 
 // void comprimir
 int comprimir(const char* inputFile, const char* outputFile) {
+    // Verificação de entrada inicial
+    if (inputFile == NULL || outputFile == NULL) {
+        fprintf(stderr, "Erro: Caminho de arquivo inválido\n");
+        return 1;
+    }
+
     HuffmanCodes* huffmanCodes = (HuffmanCodes*)malloc(sizeof(HuffmanCodes));
     if (!huffmanCodes) {
         perror("Erro ao alocar memória para HuffmanCodes");
@@ -139,6 +145,17 @@ int comprimir(const char* inputFile, const char* outputFile) {
     FILE* inFile = fopen(inputFile, "rb");
     if (!inFile) {
         perror("Erro ao abrir arquivo de entrada");
+        free(huffmanCodes);
+        return 1;
+    }
+
+    // Verificar se o arquivo está vazio
+    fseek(inFile, 0, SEEK_END);
+    long fileSize = ftell(inFile);
+    fseek(inFile, 0, SEEK_SET);
+    if (fileSize == 0) {
+        fprintf(stderr, "Erro: Arquivo de entrada está vazio\n");
+        fclose(inFile);
         free(huffmanCodes);
         return 1;
     }
@@ -169,7 +186,7 @@ int comprimir(const char* inputFile, const char* outputFile) {
 
     gerarCodigos(root, huffmanCodes);
 
-    char extOrig[256];
+    char extOrig[256] = {0};
     getFileExtension(inputFile, extOrig, sizeof(extOrig));
 
     FILE* outFile = fopen(outputFile, "wb");
@@ -204,13 +221,14 @@ int comprimir(const char* inputFile, const char* outputFile) {
     size_t bytesLidos;
     unsigned char outputByte = 0;
     int bitCount = 0;
+    size_t totalBytesCompressed = 0;
 
     while ((bytesLidos = fread(buffer, 1, BUFFER_SIZE, inFile)) > 0) {
         for (size_t i = 0; i < bytesLidos; i++) {
             unsigned char b = buffer[i];
-            Codigo* codigo = huffmanCodes->codigos[b]; // Obtém o código para o byte atual
+            Codigo* codigo = huffmanCodes->codigos[b];
             if (codigo) {
-                for (int j = 0; j < codigo->tamanho; j++) { // Itera sobre os bits do código
+                for (int j = 0; j < codigo->tamanho; j++) {
                     if (codigo->byte[j] == 1) {
                         outputByte |= (1 << (7 - bitCount));
                     }
@@ -219,6 +237,7 @@ int comprimir(const char* inputFile, const char* outputFile) {
                         fwrite(&outputByte, 1, 1, outFile);
                         outputByte = 0;
                         bitCount = 0;
+                        totalBytesCompressed++;
                     }
                 }
             }
@@ -228,6 +247,7 @@ int comprimir(const char* inputFile, const char* outputFile) {
     // Escreve os bits restantes (padding com zeros)
     if (bitCount > 0) {
         fwrite(&outputByte, 1, 1, outFile);
+        totalBytesCompressed++;
     }
 
     fclose(inFile);
@@ -235,18 +255,40 @@ int comprimir(const char* inputFile, const char* outputFile) {
     liberarArvore(root);
     free(huffmanCodes);
 
+    // Verificar se a compressão foi bem-sucedida
+    if (totalBytesCompressed == 0) {
+        fprintf(stderr, "Erro: Nenhum byte comprimido\n");
+        return 1;
+    }
+
     return 0;
 }
 
 // void descomprimir
 int descomprimir(const char* inputFile, const char* outputFile) {
+    // Verificação de entrada inicial
+    if (inputFile == NULL || outputFile == NULL) {
+        fprintf(stderr, "Erro: Caminho de arquivo inválido\n");
+        return 1;
+    }
+
     FILE* inFile = fopen(inputFile, "rb");
     if (!inFile) {
         perror("Erro ao abrir arquivo compactado para leitura");
         return 1;
     }
 
-    char extension[256];
+    // Verificar se o arquivo está vazio
+    fseek(inFile, 0, SEEK_END);
+    long fileSize = ftell(inFile);
+    fseek(inFile, 0, SEEK_SET);
+    if (fileSize == 0) {
+        fprintf(stderr, "Erro: Arquivo compactado está vazio\n");
+        fclose(inFile);
+        return 1;
+    }
+
+    char extension[256] = {0};
     if (fscanf(inFile, "EXTENSION:%s\n", extension) != 1) {
         fprintf(stderr, "Erro ao ler a extensão do arquivo compactado.\n");
         fclose(inFile);
@@ -268,9 +310,9 @@ int descomprimir(const char* inputFile, const char* outputFile) {
         return 1;
     }
 
-    //unsigned char byteLido;
     No* current = root;
     int bit;
+    size_t totalBytesDecompressed = 0;
 
     while ((bit = fgetc(inFile)) != EOF) {
         for (int i = 7; i >= 0; i--) {
@@ -284,6 +326,7 @@ int descomprimir(const char* inputFile, const char* outputFile) {
             if (current->esq == NULL && current->dir == NULL) {
                 fwrite(&current->data, 1, 1, outFile);
                 current = root;
+                totalBytesDecompressed++;
             }
         }
     }
@@ -292,10 +335,17 @@ int descomprimir(const char* inputFile, const char* outputFile) {
     fclose(outFile);
     liberarArvore(root);
 
+    // Verificar se a descompressão foi bem-sucedida
+    if (totalBytesDecompressed == 0) {
+        fprintf(stderr, "Erro: Nenhum byte descomprimido\n");
+        return 1;
+    }
+
     // Renomear o arquivo de saída para incluir a extensão original
     char outputFilenameWithExt[1024];
     snprintf(outputFilenameWithExt, sizeof(outputFilenameWithExt), "%s.%s", outputFile, extension);
-    remove(outputFile); // Remove o arquivo sem extensão
+    
+    // Verificar se a renomeação é possível
     if (rename(outputFile, outputFilenameWithExt) != 0) {
         perror("Erro ao renomear o arquivo de saída");
         return 1;
