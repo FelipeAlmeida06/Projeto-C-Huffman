@@ -6,8 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_EXT_LEN 10
-#define MAX_PATH_LEN 1024
+// Defina todas as constantes de tamanho aqui
+#define MAX_EXT_LEN 10                           // Tamanho máximo para extensões
+#define MAX_PATH_LEN_HUFFMAN 1024               // Tamanho único para caminhos em todo o projeto
 
 typedef unsigned char U8;
 
@@ -30,7 +31,7 @@ No* criarNo(U8 data, int freq);
 void liberarArvore(No* node);
 No* construirArvore(U8* dados, int* frequencias, int tamanho);
 void gerarCodigos(No* raiz, HuffmanCodes* huffmanCodes);
-void escreverArvore(FILE* arquivo, No* raiz);
+void escreverArvore(FILE* arquivo, No* raiz, const char* extOrig);      // adicionei const char* extOrig
 No* lerArvore(FILE* arquivo);
 int comprimir(const char* inputFile, const char* outputFile);
 int descomprimir(const char* inputFile, const char* outputFile);

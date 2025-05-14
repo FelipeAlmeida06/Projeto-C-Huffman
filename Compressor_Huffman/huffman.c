@@ -1,7 +1,9 @@
 #include "huffman.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <sys/stat.h>
 
 #define BUFFER_SIZE 8192
 
@@ -96,76 +98,121 @@ void gerarCodigos(No* raiz, HuffmanCodes* huffmanCodes) {
     free_codigo(&codigoAtual);
 }
 
-void escreverArvore(FILE* arquivo, No* raiz) {
-    if (raiz == NULL) return;
-    
-    if (raiz->esq == NULL && raiz->dir == NULL) {
-        fputc('1', arquivo);
-        fputc(raiz->data, arquivo);
-    } else {
-        fputc('0', arquivo);
-        escreverArvore(arquivo, raiz->esq);
-        escreverArvore(arquivo, raiz->dir);
+void escreverArvore(FILE* arquivo, No* raiz, const char* extOrig) {
+    // Escreve cabeçalho estruturado
+    fprintf(arquivo, "HUFFv2|EXT=%s|TREE=", extOrig);
+    printf("[DEBUG - ESCREVER] Cabeçalho escrito: HUFFv2|EXT=%s|TREE=, ftell: %ld\n", extOrig, ftell(arquivo)); // Depuração
+
+    // Serialização da árvore (versão robusta)
+    if (raiz == NULL) {
+        fputc('X', arquivo); // Marca nulo (nunca deve acontecer em Huffman válido)
+        printf("[DEBUG - ESCREVER] Nó Nulo, ftell: %ld\n", ftell(arquivo)); // Depuração
+        return;
     }
+
+    if (raiz->esq == NULL && raiz->dir == NULL) {
+        printf("[DEBUG - ESCREVER] Tipo: L, Dado: %d, ftell: %ld\n", raiz->data, ftell(arquivo));
+        fputc('L', arquivo); // 'L' de folha (Leaf)
+        fwrite(&raiz->data, sizeof(unsigned char), 1, arquivo); // Dado binário
+        printf("[DEBUG - ESCREVER] Folha escrita, Dado: %d, ftell: %ld\n", raiz->data, ftell(arquivo)); // Depuração
+    } else {
+        printf("[DEBUG - ESCREVER] Tipo: I, ftell: %ld\n", ftell(arquivo));
+        fputc('I', arquivo); // 'I' de nó interno (Internal)
+        printf("[DEBUG - ESCREVER] Nó interno escrito, ftell: %ld\n", ftell(arquivo)); // Depuração
+        escreverArvore(arquivo, raiz->esq, extOrig);
+        escreverArvore(arquivo, raiz->dir, extOrig);
+    }
+
+    // Delimitador final
+    fprintf(arquivo, "|ENDTREE|");
+    printf("[DEBUG - ESCREVER] Delimitador final escrito, ftell: %ld\n", ftell(arquivo)); // Depuração
 }
 
+
 No* lerArvore(FILE* arquivo) {
-    int bit = fgetc(arquivo);
-    if (bit == '1') {
-        unsigned char data = fgetc(arquivo);
-        return criarNo(data, 0);
-    } else {
-        No* node = criarNo('$', 0);
-        node->esq = lerArvore(arquivo);
-        node->dir = lerArvore(arquivo);
-        return node;
+    printf("[DEBUG - LER] Iniciando lerArvore, ftell: %ld\n", ftell(arquivo));
+
+    // Verificar assinatura HUFFv2|EXT=
+    char header[8];
+    if (fread(header, 1, 7, arquivo) != 7) {
+        fprintf(stderr, "Erro ao ler cabeçalho do arquivo\n");
+        return NULL;
     }
+    header[7] = '\0';
+    
+    if (strncmp(header, "HUFFv2|", 7) != 0) {
+        fprintf(stderr, "Erro: Formato de arquivo inválido. Cabeçalho esperado: HUFFv2|\n");
+        return NULL;
+    }
+
+    // Pular até o início da árvore (depois de EXT=...|TREE=)
+    int c;
+    while ((c = fgetc(arquivo)) != '=' && c != EOF); // Pular EXT=
+    while ((c = fgetc(arquivo)) != '|' && c != EOF); // Pular extensão
+    while ((c = fgetc(arquivo)) != '=' && c != EOF); // Pular TREE=
+
+    // Agora ler a árvore
+    int tipo = fgetc(arquivo);
+    if (tipo == EOF) {
+        fprintf(stderr, "Erro: Fim inesperado do arquivo\n");
+        return NULL;
+    }
+
+    No* no = NULL;
+    switch (tipo) {
+        case 'L': {
+            unsigned char data;
+            if (fread(&data, 1, 1, arquivo) != 1) {
+                fprintf(stderr, "Erro ao ler folha\n");
+                return NULL;
+            }
+            no = criarNo(data, 0);
+            break;
+        }
+        case 'I': {
+            no = criarNo('$', 0);
+            if (!(no->esq = lerArvore(arquivo)) || !(no->dir = lerArvore(arquivo))) {
+                liberarArvore(no);
+                return NULL;
+            }
+            break;
+        }
+        case '|':
+            return NULL; // Fim da árvore
+        default:
+            fprintf(stderr, "Erro: Tipo de nó desconhecido '%c'\n", tipo);
+            return NULL;
+    }
+
+    return no;
 }
 
 void getFileExtension(const char* filename, char* extension, size_t extSize);
 
 // void comprimir
 int comprimir(const char* inputFile, const char* outputFile) {
-    // Verificação de entrada inicial
+    // Verificação de entrada
     if (inputFile == NULL || outputFile == NULL) {
         fprintf(stderr, "Erro: Caminho de arquivo inválido\n");
         return 1;
     }
 
-    HuffmanCodes* huffmanCodes = (HuffmanCodes*)malloc(sizeof(HuffmanCodes));
-    if (!huffmanCodes) {
-        perror("Erro ao alocar memória para HuffmanCodes");
-        return 1;
-    }
-    for (int i = 0; i < 256; i++) {
-        huffmanCodes->codigos[i] = NULL;
-    }
-
-    int frequencias[256] = {0};
+    // Abrir arquivo de entrada
     FILE* inFile = fopen(inputFile, "rb");
     if (!inFile) {
         perror("Erro ao abrir arquivo de entrada");
-        free(huffmanCodes);
         return 1;
     }
 
-    // Verificar se o arquivo está vazio
-    fseek(inFile, 0, SEEK_END);
-    long fileSize = ftell(inFile);
-    fseek(inFile, 0, SEEK_SET);
-    if (fileSize == 0) {
-        fprintf(stderr, "Erro: Arquivo de entrada está vazio\n");
-        fclose(inFile);
-        free(huffmanCodes);
-        return 1;
-    }
-
+    // Contar frequências dos bytes
+    int frequencias[256] = {0};
     unsigned char byte;
     while (fread(&byte, sizeof(byte), 1, inFile) == 1) {
         frequencias[byte]++;
     }
     fclose(inFile);
 
+    // Construir árvore de Huffman
     unsigned char dadosUnicos[256];
     int freqsUnicas[256];
     int numUnicos = 0;
@@ -179,177 +226,229 @@ int comprimir(const char* inputFile, const char* outputFile) {
 
     No* root = construirArvore(dadosUnicos, freqsUnicas, numUnicos);
     if (!root) {
-        fprintf(stderr, "Erro ao construir a árvore de Huffman.\n");
-        free(huffmanCodes);
+        fprintf(stderr, "Erro ao construir a árvore de Huffman\n");
         return 1;
     }
 
-    gerarCodigos(root, huffmanCodes);
+    // Gerar códigos Huffman
+    HuffmanCodes huffmanCodes;
+    for (int i = 0; i < 256; i++) {
+        huffmanCodes.codigos[i] = NULL;
+    }
+    gerarCodigos(root, &huffmanCodes);
 
-    char extOrig[256] = {0};
-    getFileExtension(inputFile, extOrig, sizeof(extOrig));
+    const char* ext = strrchr(inputFile, '.');
+    char extOrig[MAX_EXT_LEN] = {0};
+    if (ext != NULL) {
+        strncpy(extOrig, ext + 1, sizeof(extOrig) - 1);
+        extOrig[sizeof(extOrig) - 1] = '\0'; // Garante terminação nula
+    }
 
+    // Abrir arquivo de saída
     FILE* outFile = fopen(outputFile, "wb");
     if (!outFile) {
-        perror("Erro ao abrir arquivo de saída para escrever a árvore");
+        perror("Erro ao abrir arquivo de saída");
         liberarArvore(root);
-        free(huffmanCodes);
         return 1;
     }
-    fprintf(outFile, "EXTENSION:%s\n", extOrig); // Escreve a extensão como string
-    escreverArvore(outFile, root);
+
+    // Escrever árvore no novo formato
+    escreverArvore(outFile, root, extOrig);
     fclose(outFile);
 
+    // Reabrir arquivos para compressão
     inFile = fopen(inputFile, "rb");
-    if (!inFile) {
-        perror("Erro ao abrir arquivo de entrada para compressão");
-        liberarArvore(root);
-        free(huffmanCodes);
-        return 1;
-    }
-
     outFile = fopen(outputFile, "ab");
-    if (!outFile) {
-        perror("Erro ao abrir arquivo de saída para escrever dados comprimidos");
-        fclose(inFile);
+    if (!inFile || !outFile) {
+        perror("Erro ao reabrir arquivos");
+        if (inFile) fclose(inFile);
+        if (outFile) fclose(outFile);
         liberarArvore(root);
-        free(huffmanCodes);
         return 1;
     }
 
-    unsigned char buffer[BUFFER_SIZE];
-    size_t bytesLidos;
-    unsigned char outputByte = 0;
+    // Comprimir dados
+    unsigned char buffer = 0;
     int bitCount = 0;
-    size_t totalBytesCompressed = 0;
-
-    while ((bytesLidos = fread(buffer, 1, BUFFER_SIZE, inFile)) > 0) {
-        for (size_t i = 0; i < bytesLidos; i++) {
-            unsigned char b = buffer[i];
-            Codigo* codigo = huffmanCodes->codigos[b];
-            if (codigo) {
-                for (int j = 0; j < codigo->tamanho; j++) {
-                    if (codigo->byte[j] == 1) {
-                        outputByte |= (1 << (7 - bitCount));
+    while (fread(&byte, sizeof(byte), 1, inFile) == 1) {
+        Codigo* codigo = huffmanCodes.codigos[byte];
+        if (codigo) {
+            for (int byteIdx = 0; byteIdx < (codigo->tamanho + 7) / 8; byteIdx++) {
+                U8 currentByte = codigo->byte[byteIdx];
+                int bitsInThisByte = (byteIdx == (codigo->tamanho / 8)) ? 
+                                    codigo->tamanho % 8 : 8;
+                if (bitsInThisByte == 0) bitsInThisByte = 8;
+            
+                for (int bitPos = 7; bitPos >= 8 - bitsInThisByte; bitPos--) {
+                    if (currentByte & (1 << bitPos)) {
+                        buffer |= (1 << (7 - bitCount));
                     }
                     bitCount++;
+                
                     if (bitCount == 8) {
-                        fwrite(&outputByte, 1, 1, outFile);
-                        outputByte = 0;
+                        fputc(buffer, outFile);
+                        buffer = 0;
                         bitCount = 0;
-                        totalBytesCompressed++;
                     }
                 }
             }
         }
     }
 
-    // Escreve os bits restantes (padding com zeros)
+    // Escrever bits restantes
     if (bitCount > 0) {
-        fwrite(&outputByte, 1, 1, outFile);
-        totalBytesCompressed++;
+        fputc(buffer, outFile);
     }
 
+    // Liberar recursos
     fclose(inFile);
     fclose(outFile);
     liberarArvore(root);
-    free(huffmanCodes);
-
-    // Verificar se a compressão foi bem-sucedida
-    if (totalBytesCompressed == 0) {
-        fprintf(stderr, "Erro: Nenhum byte comprimido\n");
-        return 1;
+    for (int i = 0; i < 256; i++) {
+        if (huffmanCodes.codigos[i] != NULL) {
+            free(huffmanCodes.codigos[i]);
+        }
     }
 
     return 0;
 }
 
 // void descomprimir
-int descomprimir(const char* inputFile, const char* outputFile) {
-    // Verificação de entrada inicial
-    if (inputFile == NULL || outputFile == NULL) {
-        fprintf(stderr, "Erro: Caminho de arquivo inválido\n");
+int descomprimir(const char* compressedFile, const char* decompressedFile) {
+    // Verificação de tamanhos de caminho
+    if (strlen(compressedFile) >= MAX_PATH_LEN_HUFFMAN || strlen(decompressedFile) >= MAX_PATH_LEN_HUFFMAN) {
+        fprintf(stderr, "[ERRO] Caminho muito longo (máximo %d caracteres)\n", MAX_PATH_LEN_HUFFMAN-1);
         return 1;
     }
 
-    FILE* inFile = fopen(inputFile, "rb");
+    printf("[DEBUG] Iniciando descompressão de: %s\n", compressedFile);
+
+    // Abrir arquivo comprimido
+    FILE* inFile = fopen(compressedFile, "rb");
     if (!inFile) {
-        perror("Erro ao abrir arquivo compactado para leitura");
+        perror("[ERRO] Falha ao abrir arquivo comprimido");
         return 1;
     }
 
-    // Verificar se o arquivo está vazio
-    fseek(inFile, 0, SEEK_END);
-    long fileSize = ftell(inFile);
-    fseek(inFile, 0, SEEK_SET);
-    if (fileSize == 0) {
-        fprintf(stderr, "Erro: Arquivo compactado está vazio\n");
+    // Verificar assinatura
+    char magic[8] = {0};
+    if (fread(magic, 1, 7, inFile) != 7) {
+        fprintf(stderr, "[ERRO] Arquivo corrompido (cabeçalho faltando)\n");
+        fclose(inFile);
+        return 1;
+    }
+    magic[7] = '\0';
+    printf("[DEBUG] Cabeçalho lido: %s\n", magic);
+
+    if (strncmp(magic, "HUFFv2|", 7) != 0) {
+        fprintf(stderr, "[ERRO] Formato inválido (esperado: HUFFv2|)\n");
         fclose(inFile);
         return 1;
     }
 
-    char extension[256] = {0};
-    if (fscanf(inFile, "EXTENSION:%s\n", extension) != 1) {
-        fprintf(stderr, "Erro ao ler a extensão do arquivo compactado.\n");
+    // Ler extensão de forma segura
+    char extOrig[MAX_EXT_LEN] = {0};
+    int c, i = 0;
+    
+    // Pular até EXT=
+    while ((c = fgetc(inFile)) != '=' && c != EOF) {
+        if (c == EOF) {
+            fprintf(stderr, "[ERRO] Cabeçalho EXT= não encontrado\n");
+            fclose(inFile);
+            return 1;
+        }
+    }
+    
+    // Ler extensão
+    while ((c = fgetc(inFile)) != '|' && c != EOF && i < MAX_EXT_LEN-1) {
+        extOrig[i++] = c;
+    }
+    extOrig[i] = '\0';
+    printf("[DEBUG] Extensão original: %s\n", extOrig);
+
+    if (c == EOF) {
+        fprintf(stderr, "[ERRO] Cabeçalho incompleto (faltando | após extensão)\n");
         fclose(inFile);
         return 1;
     }
 
+    // Pular até TREE=
+    while ((c = fgetc(inFile)) != '=' && c != EOF) {
+        if (c == EOF) {
+            fprintf(stderr, "[ERRO] Cabeçalho TREE= não encontrado\n");
+            fclose(inFile);
+            return 1;
+        }
+    }
+
+    // Ler árvore
+    printf("[DEBUG] Lendo árvore de Huffman...\n");
     No* root = lerArvore(inFile);
     if (!root) {
-        fprintf(stderr, "Erro ao ler a árvore de Huffman do arquivo compactado.\n");
+        fprintf(stderr, "[ERRO] Árvore de Huffman corrompida\n");
         fclose(inFile);
         return 1;
     }
 
-    FILE* outFile = fopen(outputFile, "wb");
+    // Pular delimitador final
+    while ((c = fgetc(inFile)) != '|' && c != EOF);
+
+    // Criar caminho de saída
+    char outputPath[MAX_PATH_LEN_HUFFMAN];
+    int needed = snprintf(outputPath, MAX_PATH_LEN_HUFFMAN, "%s.%s", decompressedFile, extOrig);
+    if (needed >= MAX_PATH_LEN_HUFFMAN) {
+        fprintf(stderr, "[ERRO] Caminho de saída muito longo\n");
+        liberarArvore(root);
+        fclose(inFile);
+        return 1;
+    }
+    printf("[DEBUG] Arquivo de saída: %s\n", outputPath);
+
+    // Abrir arquivo de saída
+    FILE* outFile = fopen(outputPath, "wb");
     if (!outFile) {
-        perror("Erro ao abrir arquivo de saída para escrita");
+        perror("[ERRO] Falha ao criar arquivo de saída");
         liberarArvore(root);
         fclose(inFile);
         return 1;
     }
 
+    // Processar dados
+    printf("[DEBUG] Processando dados comprimidos...\n");
     No* current = root;
-    int bit;
-    size_t totalBytesDecompressed = 0;
-
-    while ((bit = fgetc(inFile)) != EOF) {
+    int byte;
+    size_t bytes_written = 0;
+    
+    while ((byte = fgetc(inFile)) != EOF) {
         for (int i = 7; i >= 0; i--) {
-            int bitValor = (bit >> i) & 1;
-            if (bitValor == 0) {
-                current = current->esq;
-            } else {
-                current = current->dir;
-            }
-
-            if (current->esq == NULL && current->dir == NULL) {
-                fwrite(&current->data, 1, 1, outFile);
+            current = (byte & (1 << i)) ? current->dir : current->esq;
+            
+            if (!current->esq && !current->dir) {
+                if (fputc(current->data, outFile) == EOF) {
+                    perror("[ERRO] Falha ao escrever dados descomprimidos");
+                    liberarArvore(root);
+                    fclose(inFile);
+                    fclose(outFile);
+                    return 1;
+                }
+                bytes_written++;
                 current = root;
-                totalBytesDecompressed++;
             }
         }
     }
 
+    // Verificar integridade
+    if (current != root) {
+        fprintf(stderr, "[AVISO] Dados incompletos (último símbolo não finalizado)\n");
+    }
+
+    //printf("[DEBUG] Descompressão concluída. %zu bytes escritos.\n", bytes_written);
+    printf("[DEBUG] Descompressão concluída. %lu bytes escritos.\n", (unsigned long)bytes_written);
+
+    // Liberar recursos
     fclose(inFile);
     fclose(outFile);
     liberarArvore(root);
-
-    // Verificar se a descompressão foi bem-sucedida
-    if (totalBytesDecompressed == 0) {
-        fprintf(stderr, "Erro: Nenhum byte descomprimido\n");
-        return 1;
-    }
-
-    // Renomear o arquivo de saída para incluir a extensão original
-    char outputFilenameWithExt[1024];
-    snprintf(outputFilenameWithExt, sizeof(outputFilenameWithExt), "%s.%s", outputFile, extension);
-    
-    // Verificar se a renomeação é possível
-    if (rename(outputFile, outputFilenameWithExt) != 0) {
-        perror("Erro ao renomear o arquivo de saída");
-        return 1;
-    }
 
     return 0;
 }
