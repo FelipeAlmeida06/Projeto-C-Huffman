@@ -292,7 +292,7 @@ int main() {
 
 /*
 Entrar na pasta do projeto: cd "Compressor_Huffman"
-Executar: gcc -o huffman main.c huffman.c codigo.c -Wall -Wextra -std=c99  ou gcc -g -Wall -Wextra -o huffman main.c huffman.c codigo.c
+Executar: gcc -o huffman main.c huffman.c codigo.c -Wall -Wextra -std=c99
 Executar: ./huffman
 
 case 1: C:/Users/Felipe Almeida/Desktop/testes

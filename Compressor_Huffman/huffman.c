@@ -98,6 +98,24 @@ void gerarCodigos(No* raiz, HuffmanCodes* huffmanCodes) {
     free_codigo(&codigoAtual);
 }
 
+void escreverNo(FILE* arq, No* no) {
+    if (no == NULL) {
+        fputc('X', arq); // Marca nulo
+        return;
+    }
+
+    if (no->esq == NULL && no->dir == NULL) {
+        // É uma folha
+        fputc('L', arq);
+        fwrite(&no->data, sizeof(unsigned char), 1, arq);
+    } else {
+        // É um nó interno
+        fputc('I', arq);
+        escreverNo(arq, no->esq);
+        escreverNo(arq, no->dir);
+    }
+}
+
 void escreverArvore(FILE* arquivo, No* raiz, const char* extOrig) {
     // Escreve cabeçalho estruturado
     fprintf(arquivo, "HUFFv2|EXT=%s|TREE=", extOrig);
@@ -126,32 +144,12 @@ void escreverArvore(FILE* arquivo, No* raiz, const char* extOrig) {
     // Delimitador final
     fprintf(arquivo, "|ENDTREE|");
     printf("[DEBUG - ESCREVER] Delimitador final escrito, ftell: %ld\n", ftell(arquivo)); // Depuração
+    
 }
 
 
 No* lerArvore(FILE* arquivo) {
-    printf("[DEBUG - LER] Iniciando lerArvore, ftell: %ld\n", ftell(arquivo));
-
-    // Verificar assinatura HUFFv2|EXT=
-    char header[8];
-    if (fread(header, 1, 7, arquivo) != 7) {
-        fprintf(stderr, "Erro ao ler cabeçalho do arquivo\n");
-        return NULL;
-    }
-    header[7] = '\0';
-    
-    if (strncmp(header, "HUFFv2|", 7) != 0) {
-        fprintf(stderr, "Erro: Formato de arquivo inválido. Cabeçalho esperado: HUFFv2|\n");
-        return NULL;
-    }
-
-    // Pular até o início da árvore (depois de EXT=...|TREE=)
-    int c;
-    while ((c = fgetc(arquivo)) != '=' && c != EOF); // Pular EXT=
-    while ((c = fgetc(arquivo)) != '|' && c != EOF); // Pular extensão
-    while ((c = fgetc(arquivo)) != '=' && c != EOF); // Pular TREE=
-
-    // Agora ler a árvore
+    // Read the node type
     int tipo = fgetc(arquivo);
     if (tipo == EOF) {
         fprintf(stderr, "Erro: Fim inesperado do arquivo\n");
@@ -177,8 +175,10 @@ No* lerArvore(FILE* arquivo) {
             }
             break;
         }
-        case '|':
-            return NULL; // Fim da árvore
+        case '|': // Encontrou delimitador final da árvore
+            return NULL;
+        case 'X': // Para compatibilidade com nós nulos (embora não devam ocorrer)
+            return NULL;
         default:
             fprintf(stderr, "Erro: Tipo de nó desconhecido '%c'\n", tipo);
             return NULL;
@@ -313,7 +313,6 @@ int comprimir(const char* inputFile, const char* outputFile) {
     return 0;
 }
 
-// void descomprimir
 int descomprimir(const char* compressedFile, const char* decompressedFile) {
     // Verificação de tamanhos de caminho
     if (strlen(compressedFile) >= MAX_PATH_LEN_HUFFMAN || strlen(decompressedFile) >= MAX_PATH_LEN_HUFFMAN) {
