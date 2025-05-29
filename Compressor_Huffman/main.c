@@ -9,18 +9,8 @@
 
 #define MAX_PATH_LEN 512    // Definir um tamanho máximo consistente
 
-#ifdef _WIN32
-#include <windows.h>
-//#else
-//#include <unistd.h>
-#endif
-
 void clearScreen() {
-    #ifdef _WIN32
-        system("cls");
-    //#else
-        //system("clear");
-    #endif
+    system("clear");
 }
 
 typedef struct {
@@ -147,8 +137,7 @@ int main() {
                 break;
             }
             fclose(testFile);
-
-            // Obter tamanho original
+            
             size_t originalBytes;
             getFileSize(inputPath, &originalBytes);
             char* originalSize = formatFileSize(originalBytes);
@@ -293,11 +282,10 @@ int main() {
 /*
 Entrar na pasta do projeto: cd "Compressor_Huffman"
 Executar: gcc -o huffman main.c huffman.c codigo.c -Wall -Wextra -std=c99
-Executar: ./huffman
+Executar: ./huffman ou ./huff
 
 case 1: C:/Users/Felipe Almeida/Desktop/testes
 digitar o nome do arquivo: por exemplo, teste.txt (nao esquecer de colocar a extensao)
 
 case 2: C:/Users/Felipe Almeida/Desktop/testes/teste.pcb
-
 */

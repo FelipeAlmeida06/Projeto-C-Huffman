@@ -17,54 +17,59 @@ void free_codigo(Codigo* c) // por referência
     c->byte = NULL;
 }
 
-bool adiciona_bit(Codigo* c,  // por referência
-                  U8 valor)   // 0 ou 1
+bool adiciona_bit(Codigo* c, U8 valor)
 {
     if (c->tamanho == c->capacidade)
     {
-        U8* novo = (U8*)malloc((c->capacidade / 8 + 1) * sizeof(U8));
+        int novos_bytes = (c->capacidade + 8) / 8;
+        U8* novo = (U8*)malloc(novos_bytes);
         if (novo == NULL) return false;
 
-        for (int i = 0; i < c->tamanho / 8; i++)
+        for (int i = 0; i < c->capacidade / 8; i++)
             novo[i] = c->byte[i];
 
         free(c->byte);
         c->byte = novo;
-
         c->capacidade += 8;
     }
 
-    c->byte[c->capacidade / 8 - 1] <<= 1;
+    int byte_atual = c->tamanho / 8;
+    int bit_no_byte = 7 - (c->tamanho % 8);  // para armazenar da esquerda para direita
+
+    if (bit_no_byte == 7) c->byte[byte_atual] = 0;  // zera o byte ao iniciar
 
     if (valor == 1)
-        c->byte[c->capacidade / 8 - 1] |= 1;
+        c->byte[byte_atual] |= (1 << bit_no_byte);
 
     c->tamanho++;
     return true;
 }
 
-bool joga_fora_bit(Codigo* c) // por referência
+bool joga_fora_bit(Codigo* c)
 {
     if (c->tamanho == 0) return false;
 
-    c->byte[c->capacidade / 8 - 1] >>= 1;
+    int byte_atual = (c->tamanho - 1) / 8;
+    int bit_no_byte = 7 - ((c->tamanho - 1) % 8);
+    c->byte[byte_atual] &= ~(1 << bit_no_byte); // limpa o bit
+
     c->tamanho--;
 
     if (c->capacidade > 8 && c->capacidade - c->tamanho == 8)
     {
-        U8* novo = (U8*)malloc((c->capacidade / 8 - 1) * sizeof(U8));
+        int novos_bytes = (c->capacidade - 8) / 8;
+        U8* novo = (U8*)malloc(novos_bytes);
         if (novo == NULL) return false;
 
-        for (int i = 0; i < c->tamanho / 8; i++)
+        for (int i = 0; i < novos_bytes; i++)
             novo[i] = c->byte[i];
 
         free(c->byte);
         c->byte = novo;
-
         c->capacidade -= 8;
     }
 
-    return true; // Adicionado para cobrir todos os caminhos
+    return true;
 }
 
 bool clone(Codigo original,   // por valor
