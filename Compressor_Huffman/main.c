@@ -44,25 +44,25 @@ char* formatFileSize(size_t bytes) {
 void showSuccessMessage(const char* operation, const char* originalSize, const char* newSize, const char* filePath) {
     clearScreen();
     printf("=============================================\n");
-    printf("|         OPERAÇÃO REALIZADA COM SUCESSO!   |\n");
+    printf("|         OPERACAO REALIZADA COM SUCESSO!   |\n");
     printf("=============================================\n\n");
     
-    printf("✅ %s concluída com sucesso!\n\n", operation);
+    printf("✅ %s concluida com sucesso!\n\n", operation);
     
-    printf("📊 Estatísticas:\n");
+    printf("Estatisticas:\n");
     printf("---------------------------------------------\n");
     printf("%-25s%s\n", "Tamanho original:", originalSize);
-    printf("%-25s%s\n", "Tamanho após operação:", newSize);
+    printf("%-25s%s\n", "Tamanho apos operacao:", newSize);
     
     if (strcmp(originalSize, "N/A") != 0 && strcmp(newSize, "N/A") != 0) {
         double orig, novo;
         sscanf(originalSize, "%lf", &orig);
         sscanf(newSize, "%lf", &novo);
         double ratio = (1 - (novo / orig)) * 100;
-        printf("%-25s%.2f%%\n", "Taxa de compressão:", ratio);
+        printf("%-25s%.2f%%\n", "Taxa de compressao:", ratio);
     }
     
-    printf("\n📁 Arquivo %s salvo em:\n", strcmp(operation, "Compressão") == 0 ? "comprimido" : "descomprimido");
+    printf("\n Arquivo %s salvo em:\n", strcmp(operation, "Compressao") == 0 ? "comprimido" : "descomprimido");
     printf("🔹 %s\n\n", filePath);
 }
 
@@ -85,24 +85,27 @@ int main() {
 
     do {
         printf("======================================================================\n");
-        printf("Trabalho 2 - Linguagens de Programação\n");
-        printf("MENU DE OPÇÕES\n");
-        printf("1 ----- Comprimir arquivo \n");
-        printf("2 ----- Descomprimir arquivo \n");
-        printf("3 ----- Sair do programa \n");
-        printf("Escolha uma opção (1-3): ");
+        printf("MENU DE OPCOES\n");
+        printf("\n");
+        printf("1. Comprimir arquivo \n");
+        printf("2. Descomprimir arquivo \n");
+        printf("3. Sair do programa \n");
+        printf("Escolha uma opcao (1-3): ");
         scanf(" %c", &resp);
         
         switch (resp) {
         case '1': {
             printf("===========================================\n");
-            printf("Opção escolhida: 1 ----- COMPRIMIR ARQUIVO\n");
-            printf("Digite o endereço do arquivo\nEx: C:/Users/Pichau/Documents/GitHub\n");
+            printf("Opcao escolhida: 1. COMPRIMIR arquivo\n");
+            printf("\n");
+            printf("Digite o endereco do arquivo que deseja comprimir      Ex: C:/seu-usuario/Documents/GitHub\n");
+            printf("> ");
             while (getchar() != '\n'); // Limpar buffer
             fgets(inputDir, sizeof(inputDir), stdin);
             inputDir[strcspn(inputDir, "\n")] = '\0';
     
-            printf("Digite o nome do arquivo\nEx: input.txt\n");
+            printf("Digite o nome do arquivo que deseja comprimir          Ex: input.txt\n");
+            printf("> ");
             fgets(inputName, sizeof(inputName), stdin);
             inputName[strcspn(inputName, "\n")] = '\0';
 
@@ -144,7 +147,7 @@ int main() {
 
             // Executar compressão
             if (comprimir(inputPath, compressedFile)) {
-                fprintf(stderr, "Erro durante a compressão\n");
+                fprintf(stderr, "Erro durante a compressao\n");
                 free(originalSize);
                 break;
             }
@@ -155,7 +158,7 @@ int main() {
             char* compressedSize = formatFileSize(compressedBytes);
 
             // Mostrar resultados
-            showSuccessMessage("Compressão", originalSize, compressedSize, compressedFile);
+            showSuccessMessage("Compressao", originalSize, compressedSize, compressedFile);
     
             // Liberar memória
             free(originalSize);
@@ -164,14 +167,14 @@ int main() {
         }
         case '2': {
             printf("===========================================\n");
-            printf("Opção escolhida: 2 ----- DESCOMPRIMIR ARQUIVO\n");
+            printf("Opcao escolhida: 2. DESCOMPRIMIR arquivo\n");
+            printf("\n");
 
             // Limpar buffer
             while (getchar() != '\n');
 
             // Solicitar caminho COMPLETO
-            printf("Digite o caminho COMPLETO do arquivo .pcb\n");
-            printf("Exemplo: C:/Users/SeuNome/Desktop/teste.pcb\n");
+            printf("Digite endereco do arquivo .pcb que deseja descomprimir         Ex: C:/seu-usuario/Documents/GitHub/teste.pcb\n");
             printf("> ");
             
             char fullPath[512];
@@ -187,7 +190,7 @@ int main() {
             // Verificar se arquivo existe
             FILE* testFile = fopen(fullPath, "rb");
             if (!testFile) {
-                perror("[ERRO] Arquivo não encontrado");
+                perror("[ERRO] Arquivo nao encontrado");
                 break;
             }
             fclose(testFile);
@@ -217,7 +220,7 @@ int main() {
 
             // Descomprimir
             if (descomprimir(fullPath, outputPath)) {
-                fprintf(stderr, "Erro na descompressão\n");
+                fprintf(stderr, "Erro na descompressao\n");
                 free(originalSizeStr);
                 break;
             }
@@ -245,7 +248,7 @@ int main() {
                 MAX_EXT_LEN-1, 
                 extOrig);
             if (needed >= (int)sizeof(finalOutput)) {
-                fprintf(stderr, "Erro: Caminho muito longo para arquivo de saída\n");
+                fprintf(stderr, "Erro: Caminho muito longo para arquivo de saida\n");
                 free(originalSizeStr);
                 break;
             }
@@ -256,7 +259,7 @@ int main() {
             char* newSizeStr = formatFileSize(newSize);
 
             // Mostrar resultados
-            showSuccessMessage("Descompressão", originalSizeStr, newSizeStr, finalOutput);
+            showSuccessMessage("Descompressao", originalSizeStr, newSizeStr, finalOutput);
 
             // Liberar memória
             free(originalSizeStr);
@@ -265,13 +268,13 @@ int main() {
         }
         case '3':
             printf("===========================================\n");
-            printf("Opção escolhida: 3 ----- SAIR DO PROGRAMA\n");
-            printf("Obrigado por utilizar o programa! Saindo ...\n");
+            printf("Opcao escolhida: 3. Sair do programa \n");
+            printf("Saindo do programa ...\n");
             break;
         default:
             printf("===========================================\n");
-            printf("Opção escolhida: INVÁLIDA!\n");
-            printf("Digite um numero válido!\n");
+            printf("Opçao escolhida: INVALIDA!\n");
+            printf("Digite um numero valido!\n");
             break;
         }
     } while (resp != '3');
@@ -282,10 +285,5 @@ int main() {
 /*
 Entrar na pasta do projeto: cd "Compressor_Huffman"
 Executar: gcc -o huffman main.c huffman.c codigo.c -Wall -Wextra -std=c99
-Executar: ./huffman ou ./huff
-
-case 1: C:/Users/Felipe Almeida/Desktop/testes
-digitar o nome do arquivo: por exemplo, teste.txt (nao esquecer de colocar a extensao)
-
-case 2: C:/Users/Felipe Almeida/Desktop/testes/teste.pcb
+Executar: ./huffman
 */
