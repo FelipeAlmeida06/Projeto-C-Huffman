@@ -73,7 +73,7 @@ O programa também exibe:
 ## 1. Clone o repositório
 
 ```bash
-https://github.com/FelipeAlmeida06/Projeto-C-Huffman
+https://github.com/FelipeAlmeida06/Projeto-C-Huffman.git
 ```
 
 ## 2. Acesse a pasta do projeto
